@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Puzzle JKT48</title>
+<title>Puzzle Foto</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#12141c;--panel:#242738;--sand:#ececef;--maple:#f2c14e;--ink:#171a26;--ok:#7fb069}
@@ -32,7 +32,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;
 </style></head><body>
 
 <section class="scr on" id="s-login">
-  <h1>Puzzle JKT48</h1><p></p>
+  <h1>Puzzle Foto</h1><p>Geser kotak sampai potongan foto menyatu lagi.</p>
   <input id="nm" placeholder="Nama" maxlength="16" autocomplete="off">
   <input id="pin" placeholder="PIN 4 angka" inputmode="numeric" maxlength="4" type="password">
   <div class="err" id="err"></div>
@@ -43,7 +43,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;
 <section class="scr" id="s-home">
   <div class="top"><h1 id="hi"></h1><button class="g" onclick="logout()">Keluar</button></div>
   <h2>Pilih foto</h2><div class="photos" id="pl"></div>
-  <h2>Pilih ukuran <small style="font-weight:400;opacity:.7">skor terbaikmu!!!</small></h2>
+  <h2>Pilih ukuran <small style="font-weight:400;opacity:.7">skor dan waktu terbaikmu di bawah tiap ukuran</small></h2>
   <div class="lay" id="ly"></div>
   <button class="full" onclick="start()">Main</button>
   <button class="full g" onclick="board()">Leaderboard</button>
@@ -58,7 +58,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;
 
 <section class="scr" id="s-board">
   <div class="top"><h1>Leaderboard</h1><button class="g" onclick="home()">Kembali</button></div>
-  <p>Skor terbaik tiap pemain.</p>
+  <p>Skor terbaik tiap pemain, semua ukuran digabung.</p>
   <table id="lb"></table>
 </section>
 
@@ -102,8 +102,9 @@ async function home(){
     if(photos.length)pick(0);
   }
 }
-function renderLay(){$('#ly').innerHTML=[4,6,8,16].map(n=>`<button data-n="${n}" class="${n==N?'sel':''}" onclick="setN(${n})">${n}x${n}<small>${bests[n]||'–'}</small></button>`).join('')}
-async function loadBests(){try{const s=await db.collection('scores').doc(user.id).get();if(s.exists){const d=s.data();bests={...(d.bests||{})};if(d.n&&d.score&&!bests[d.n])bests[d.n]=d.score;renderLay()}}catch(e){}}
+const nb=v=>v==null?null:typeof v==='object'?v:{s:v,t:null};
+function renderLay(){$('#ly').innerHTML=[4,6,8,16].map(n=>`<button data-n="${n}" class="${n==N?'sel':''}" onclick="setN(${n})">${n}x${n}<small>${bests[n]?bests[n].s:'–'}</small><small>${bests[n]&&bests[n].t!=null?fmt(bests[n].t):'&nbsp;'}</small></button>`).join('')}
+async function loadBests(){try{const s=await db.collection('scores').doc(user.id).get();if(s.exists){const d=s.data();bests={};Object.entries(d.bests||{}).forEach(([k,v])=>bests[k]=nb(v));if(d.n&&d.score&&!bests[d.n])bests[d.n]={s:d.score,t:d.sec??null};renderLay()}}catch(e){}}
 function pick(i){photo=photos[i];document.querySelectorAll('#pl img').forEach((e,j)=>e.classList.toggle('sel',i==j))}
 function setN(n){N=n;document.querySelectorAll('#ly button').forEach(e=>e.classList.toggle('sel',+e.dataset.n==n))}
 
@@ -139,27 +140,28 @@ function tap(id){
 }
 
 // Skor: dasar = jumlah kotak x 100, dikali faktor waktu (1,5 jika instan, 0,5 jika sama dengan waktu acuan, minimal 0,1).
-// Waktu acuan = jumlah kotak x 6 detik.
+// Waktu acuan = jumlah kotak x 20 detik.
 async function win(){
   done=true;stop();$('#board').classList.add('win');$('#prev').style.display='none';
-  const T=N*N,sec=Math.max(1,Math.round((Date.now()-t0)/1000)),f=Math.max(.1,1.5-sec/(T*6)),score=Math.round(T*100*f);
+  const T=N*N,sec=Math.max(1,Math.round((Date.now()-t0)/1000)),f=Math.max(.1,1.5-sec/(T*20)),score=Math.round(T*100*f);
   const r=$('#res');r.style.display='block';r.innerHTML=`Selesai ${N}x${N} dalam ${fmt(sec)}, ${moves} langkah<br><b>${score}</b> poin<div id="sv"></div><div class="row"><button onclick="start()">Main lagi</button><button class="g" onclick="board()">Leaderboard</button></div>`;
   try{
-    const ref=db.collection('scores').doc(user.id),s=await ref.get(),d=s.exists?s.data():{},bs={...(d.bests||{})};
-    if(d.n&&d.score&&!bs[d.n])bs[d.n]=d.score;
-    const rec=!(bs[N]>=score);if(rec)bs[N]=score;
+    const ref=db.collection('scores').doc(user.id),s=await ref.get(),d=s.exists?s.data():{},bs={};
+    Object.entries(d.bests||{}).forEach(([k,v])=>bs[k]=nb(v));
+    if(d.n&&d.score&&!bs[d.n])bs[d.n]={s:d.score,t:d.sec??null};
+    const o=bs[N],rec=!o||score>o.s||(score===o.s&&o.t!=null&&sec<o.t);if(rec)bs[N]={s:score,t:sec};
     const upd={bests:bs};
-    if(!s.exists||d.score<score)Object.assign(upd,{name:user.name,score,n:N,sec,moves,t:firebase.firestore.FieldValue.serverTimestamp()});
+    if(!s.exists||d.score<score||(d.score===score&&sec<(d.sec??1e9)))Object.assign(upd,{name:user.name,score,n:N,sec,moves,t:firebase.firestore.FieldValue.serverTimestamp()});
     await ref.set(upd,{merge:true});bests=bs;
-    $('#sv').textContent=rec?'Rekor baru untuk '+N+'x'+N+'!':'Terbaik '+N+'x'+N+': '+bs[N]+'.';
+    $('#sv').textContent=rec?'Rekor baru untuk '+N+'x'+N+'!':'Terbaik '+N+'x'+N+': '+bs[N].s+(bs[N].t!=null?' dalam '+fmt(bs[N].t):'')+'.';
   }catch(e){$('#sv').textContent='Skor gagal disimpan. Periksa koneksi.'}
 }
 
 async function board(){
   stop();show('s-board');$('#lb').innerHTML='<tr><td>Memuat...</td></tr>';
   try{
-    const q=await db.collection('scores').orderBy('score','desc').limit(20).get();
-    $('#lb').innerHTML='<tr><th></th><th>Pemain</th><th>Ukuran</th><th>Waktu</th><th>Skor</th></tr>'+q.docs.map((d,i)=>{const s=d.data();
+    const q=await db.collection('scores').orderBy('score','desc').limit(50).get();const rows=q.docs.sort((x,y)=>y.data().score-x.data().score||(x.data().sec||0)-(y.data().sec||0)).slice(0,20);
+    $('#lb').innerHTML='<tr><th></th><th>Pemain</th><th>Ukuran</th><th>Waktu</th><th>Skor</th></tr>'+rows.map((d,i)=>{const s=d.data();
       return`<tr class="${d.id==user.id?'me':''}"><td>${i+1}</td><td>${s.name.replace(/[<>&]/g,'')}</td><td>${s.n}x${s.n}</td><td>${fmt(s.sec)}</td><td>${s.score}</td></tr>`}).join('')||'<tr><td>Belum ada skor.</td></tr>';
   }catch(e){$('#lb').innerHTML='<tr><td>Gagal memuat leaderboard.</td></tr>'}
 }
