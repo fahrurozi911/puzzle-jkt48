@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin Puzzle Foto</title>
+<style>
+:root{--bg:#2b1d14;--panel:#3a281c;--sand:#f1e3c8;--maple:#d9a85f;--ink:#1a120c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--sand);font:16px/1.4 system-ui,sans-serif;max-width:640px;margin:0 auto;padding:20px 16px 40px}
+input{width:100%;padding:14px;margin:6px 0;border-radius:12px;border:2px solid #5a3f2b;background:var(--ink);color:var(--sand);font:inherit}
+button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 18px;background:var(--maple);color:var(--ink);cursor:pointer}
+button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin-top:8px}
+.msg{min-height:24px;margin:8px 0}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+.card{background:var(--panel);border-radius:12px;padding:8px}.card img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}
+.card div{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px;font-size:14px}
+#panel{display:none}
+</style></head><body>
+<h1>Admin</h1>
+<div id="login">
+  <input id="em" type="email" placeholder="Email admin" autocomplete="username">
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+  <button class="full" onclick="signIn()">Masuk</button>
+</div>
+<div id="panel">
+  <p>Foto dipotong persegi dari bagian tengah, lalu dikompres otomatis.</p>
+  <input id="f" type="file" accept="image/*" multiple>
+  <button class="full" onclick="upload()">Upload foto</button>
+  <button class="full g" onclick="firebase.auth().signOut()">Keluar</button>
+  <div class="grid" id="list"></div>
+</div>
+<div class="msg" id="msg"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(FIREBASE_CONFIG);
+const db=firebase.firestore(),$=s=>document.querySelector(s),msg=m=>$('#msg').textContent=m;
+
+firebase.auth().onAuthStateChanged(u=>{
+  $('#login').style.display=u?'none':'block';$('#panel').style.display=u?'block':'none';
+  if(u)load();
+});
+function signIn(){firebase.auth().signInWithEmailAndPassword($('#em').value,$('#pw').value).then(()=>msg('')).catch(()=>msg('Email atau password salah.'))}
+
+function comp(file,q){return new Promise((ok,no)=>{
+  const im=new Image();
+  im.onload=()=>{const s=Math.min(im.width,im.height),c=document.createElement('canvas');c.width=c.height=900;
+    c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,900,900);URL.revokeObjectURL(im.src);ok(c.toDataURL('image/jpeg',q))};
+  im.onerror=no;im.src=URL.createObjectURL(file)})}
+
+async function upload(){
+  const fs=[...$('#f').files];if(!fs.length)return msg('Pilih foto dulu.');
+  for(let i=0;i<fs.length;i++){
+    msg(`Mengunggah ${i+1} dari ${fs.length}...`);
+    try{
+      let d=await comp(fs[i],.8);if(d.length>900000)d=await comp(fs[i],.55);
+      await db.collection('photos').add({title:fs[i].name.replace(/\.[^.]+$/,''),data:d,created:firebase.firestore.FieldValue.serverTimestamp()});
+    }catch(e){msg('Gagal mengunggah '+fs[i].name+'. Pastikan kamu masuk sebagai admin.');return}
+  }
+  $('#f').value='';msg('Selesai. Foto sudah muncul di game.');load();
+}
+async function load(){
+  const q=await db.collection('photos').orderBy('created','desc').get();
+  $('#list').innerHTML=q.docs.map(d=>`<div class="card"><img src="${d.data().data}"><div><span>${d.data().title.replace(/[<>&]/g,'')}</span><button class="g" onclick="del('${d.id}')">Hapus</button></div></div>`).join('')||'<p>Belum ada foto.</p>';
+}
+async function del(id){if(!confirm('Hapus foto ini?'))return;await db.collection('photos').doc(id).delete();load()}
+</script></body></html>

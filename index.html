@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Puzzle Foto</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#2b1d14;--panel:#3a281c;--sand:#f1e3c8;--maple:#d9a85f;--ink:#1a120c;--ok:#7fb069}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--sand);font:16px/1.4 Fredoka,system-ui,sans-serif;min-height:100vh}
+.scr{display:none;max-width:560px;margin:0 auto;padding:20px 16px 40px}.scr.on{display:block}
+h1{font-size:28px;margin:8px 0 4px}h2{font-size:20px;margin:20px 0 8px}p{margin:4px 0 12px;opacity:.85}
+input{width:100%;padding:14px;margin:6px 0;border-radius:12px;border:2px solid #5a3f2b;background:var(--ink);color:var(--sand);font:inherit}
+input:focus,button:focus-visible{outline:3px solid var(--maple)}
+button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 18px;background:var(--maple);color:var(--ink);cursor:pointer}
+button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin-top:8px}
+.err{color:#ff9b85;min-height:22px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:3px solid transparent;cursor:pointer}
+.photos img.sel{border-color:var(--maple)}
+.lay{display:flex;gap:8px}.lay button{flex:1;background:var(--panel);color:var(--sand)}.lay button.sel{background:var(--maple);color:var(--ink)}
+#board{position:relative;width:100%;aspect-ratio:1;background:var(--ink);border:8px solid #6b4a2f;border-radius:10px;touch-action:manipulation}
+.t{position:absolute;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px rgba(0,0,0,.45);cursor:pointer;transition:left .12s,top .12s}
+.t.blank{display:none}#board.win .t{box-shadow:none;transition:none}#board.win .t.blank{display:block}
+#prev{display:none;position:absolute;inset:0;background-size:cover;opacity:.9;border-radius:2px}
+.stats{display:flex;justify-content:space-around;margin:12px 0;font-size:20px}
+.row{display:flex;gap:8px;margin-top:12px}.row button{flex:1}
+#res{display:none;background:var(--panel);border-radius:12px;padding:14px;margin-top:12px;text-align:center}
+#res b{font-size:32px;color:var(--maple)}
+table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;border-bottom:1px solid #4a3425}td:first-child{width:32px}
+.me{color:var(--maple)}
+</style></head><body>
+
+<section class="scr on" id="s-login">
+  <h1>Puzzle Foto</h1><p>Geser kotak sampai potongan foto menyatu lagi.</p>
+  <input id="nm" placeholder="Nama" maxlength="16" autocomplete="off">
+  <input id="pin" placeholder="PIN 4 angka" inputmode="numeric" maxlength="4" type="password">
+  <div class="err" id="err"></div>
+  <button class="full" onclick="login()">Masuk</button>
+  <p style="font-size:14px">Nama baru otomatis terdaftar dengan PIN yang kamu isi. Ingat PIN-mu.</p>
+</section>
+
+<section class="scr" id="s-home">
+  <div class="top"><h1 id="hi"></h1><button class="g" onclick="logout()">Keluar</button></div>
+  <h2>Pilih foto</h2><div class="photos" id="pl"></div>
+  <h2>Pilih ukuran</h2>
+  <div class="lay" id="ly"></div>
+  <button class="full" onclick="start()">Main</button>
+  <button class="full g" onclick="board()">Leaderboard</button>
+</section>
+
+<section class="scr" id="s-game">
+  <div class="top"><button class="g" onclick="home()">Kembali</button><button class="g" onclick="prev()">Lihat foto</button><button class="g" onclick="start()">Acak ulang</button></div>
+  <div class="stats"><span id="tm">0:00</span><span id="mv">0 langkah</span></div>
+  <div id="board"><div id="prev"></div></div>
+  <div id="res"></div>
+</section>
+
+<section class="scr" id="s-board">
+  <div class="top"><h1>Leaderboard</h1><button class="g" onclick="home()">Kembali</button></div>
+  <p>Skor terbaik tiap pemain, semua ukuran digabung.</p>
+  <table id="lb"></table>
+</section>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(FIREBASE_CONFIG);
+const db=firebase.firestore(),$=s=>document.querySelector(s);
+let user=null,photos=[],photo=null,N=4,b=[],t0=0,timer=null,moves=0,done=false;
+
+function show(id){document.querySelectorAll('.scr').forEach(e=>e.classList.toggle('on',e.id===id))}
+function err(m){$('#err').textContent=m}
+async function sha(s){const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+
+async function login(){
+  const name=$('#nm').value.trim(),pin=$('#pin').value;
+  if(!/^[\p{L}\d _-]{2,16}$/u.test(name)||!/^\d{4}$/.test(pin))return err('Nama 2-16 huruf/angka dan PIN 4 angka.');
+  const id=name.toLowerCase(),h=await sha(id+':'+pin),ref=db.collection('users').doc(id);
+  try{
+    const s=await ref.get();
+    if(s.exists){if(s.data().h!==h)return err('PIN salah untuk nama ini.')}else await ref.set({name,h});
+    user={id,name};localStorage.setItem('pf_user',JSON.stringify(user));err('');home();
+  }catch(e){err('Tidak bisa terhubung. Periksa koneksi dan konfigurasi Firebase.')}
+}
+function logout(){localStorage.removeItem('pf_user');user=null;show('s-login')}
+
+async function home(){
+  stop();show('s-home');$('#hi').textContent='Hai, '+user.name;
+  $('#ly').innerHTML=[4,6,8,16].map(n=>`<button data-n="${n}" class="${n==N?'sel':''}" onclick="setN(${n})">${n}x${n}</button>`).join('');
+  if(!photos.length){
+    try{const q=await db.collection('photos').orderBy('created','desc').get();photos=q.docs.map(d=>({id:d.id,...d.data()}))}catch(e){}
+    $('#pl').innerHTML=photos.length?photos.map((p,i)=>`<img src="${p.data}" alt="${p.title}" onclick="pick(${i})">`).join(''):'<p>Belum ada foto. Minta admin menambahkannya.</p>';
+    if(photos.length)pick(0);
+  }
+}
+function pick(i){photo=photos[i];document.querySelectorAll('#pl img').forEach((e,j)=>e.classList.toggle('sel',i==j))}
+function setN(n){N=n;document.querySelectorAll('#ly button').forEach(e=>e.classList.toggle('sel',+e.dataset.n==n))}
+
+function nbrs(i){const r=i/N|0,c=i%N,a=[];if(r>0)a.push(i-N);if(r<N-1)a.push(i+N);if(c>0)a.push(i-1);if(c<N-1)a.push(i+1);return a}
+function place(id){const i=b.indexOf(id),e=$('#t'+id);e.style.left=(i%N)*100/N+'%';e.style.top=(i/N|0)*100/N+'%'}
+
+function start(){
+  if(!photo)return;stop();show('s-game');done=false;moves=0;
+  $('#res').style.display='none';$('#prev').style.display='none';$('#prev').style.backgroundImage=`url(${photo.data})`;
+  $('#tm').textContent='0:00';$('#mv').textContent='0 langkah';
+  const g=$('#board'),T=N*N;g.className='';[...g.querySelectorAll('.t')].forEach(e=>e.remove());
+  b=[...Array(T).keys()];let bl=T-1,last=-1;
+  for(let k=0;k<T*30;k++){const o=nbrs(bl).filter(x=>x!==last),m=o[Math.random()*o.length|0];[b[bl],b[m]]=[b[m],b[bl]];last=bl;bl=m}
+  for(let id=0;id<T;id++){
+    const e=document.createElement('div');e.className='t'+(id==T-1?' blank':'');e.id='t'+id;
+    e.style.cssText=`width:${100/N}%;height:${100/N}%;background-image:url(${photo.data});background-size:${N*100}% ${N*100}%;background-position:${(id%N)*100/(N-1)}% ${(id/N|0)*100/(N-1)}%`;
+    e.onclick=()=>tap(id);g.insertBefore(e,$('#prev'));place(id);
+  }
+}
+function prev(){const p=$('#prev');p.style.display=p.style.display=='block'?'none':'block'}
+function stop(){clearInterval(timer);timer=null}
+function fmt(s){return(s/60|0)+':'+String(s%60).padStart(2,'0')}
+
+function tap(id){
+  if(done)return;const T=N*N,i=b.indexOf(id),j=b.indexOf(T-1);
+  if((i/N|0)!==(j/N|0)&&i%N!==j%N)return;
+  const step=(i/N|0)===(j/N|0)?(i>j?1:-1):(i>j?N:-N);
+  for(let k=j;k!==i;k+=step)b[k]=b[k+step];b[i]=T-1;
+  for(let t=0;t<T;t++)place(t);
+  $('#mv').textContent=++moves+' langkah';
+  if(!timer){t0=Date.now();timer=setInterval(()=>$('#tm').textContent=fmt((Date.now()-t0)/1000|0),500)}
+  if(b.every((v,k)=>v===k))win();
+}
+
+// Skor: dasar = jumlah kotak x 100, dikali faktor waktu (1,5 jika instan, 0,5 jika sama dengan waktu acuan, minimal 0,1).
+// Waktu acuan = jumlah kotak x 6 detik.
+async function win(){
+  done=true;stop();$('#board').classList.add('win');$('#prev').style.display='none';
+  const T=N*N,sec=Math.max(1,Math.round((Date.now()-t0)/1000)),f=Math.max(.1,1.5-sec/(T*6)),score=Math.round(T*100*f);
+  const r=$('#res');r.style.display='block';r.innerHTML=`Selesai ${N}x${N} dalam ${fmt(sec)}, ${moves} langkah<br><b>${score}</b> poin<div id="sv"></div><div class="row"><button onclick="start()">Main lagi</button><button class="g" onclick="board()">Leaderboard</button></div>`;
+  try{
+    const ref=db.collection('scores').doc(user.id),s=await ref.get();
+    if(!s.exists||s.data().score<score){await ref.set({name:user.name,score,n:N,sec,moves,t:firebase.firestore.FieldValue.serverTimestamp()});$('#sv').textContent='Skor terbaikmu diperbarui.'}
+    else $('#sv').textContent='Skor terbaikmu masih '+s.data().score+'.';
+  }catch(e){$('#sv').textContent='Skor gagal disimpan. Periksa koneksi.'}
+}
+
+async function board(){
+  stop();show('s-board');$('#lb').innerHTML='<tr><td>Memuat...</td></tr>';
+  try{
+    const q=await db.collection('scores').orderBy('score','desc').limit(20).get();
+    $('#lb').innerHTML='<tr><th></th><th>Pemain</th><th>Ukuran</th><th>Waktu</th><th>Skor</th></tr>'+q.docs.map((d,i)=>{const s=d.data();
+      return`<tr class="${d.id==user.id?'me':''}"><td>${i+1}</td><td>${s.name.replace(/[<>&]/g,'')}</td><td>${s.n}x${s.n}</td><td>${fmt(s.sec)}</td><td>${s.score}</td></tr>`}).join('')||'<tr><td>Belum ada skor.</td></tr>';
+  }catch(e){$('#lb').innerHTML='<tr><td>Gagal memuat leaderboard.</td></tr>'}
+}
+
+try{const u=JSON.parse(localStorage.getItem('pf_user'));if(u&&u.id){user=u;home()}}catch(e){}
+</script></body></html>
