@@ -15,7 +15,7 @@ button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin
 .card div{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px;font-size:14px}
 #panel{display:none}
 </style></head><body>
-<h1>Puzzle Jazzy</h1>
+<h1>Admin</h1>
 <div id="login">
   <input id="em" type="email" placeholder="Email admin" autocomplete="username">
   <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
@@ -33,7 +33,14 @@ button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAPXhRs345cqCxQEQY2-gcCyuGBIvIGBis",
+  authDomain: "puzzle-foto.firebaseapp.com",
+  projectId: "puzzle-foto",
+  appId: "1:842084113827:web:c3cb5e5f36be3986290e16"
+};
+</script>
 <script>
 window.onerror=m=>{document.getElementById('msg').textContent='Error: '+m};
 window.onunhandledrejection=e=>{document.getElementById('msg').textContent='Error: '+(e.reason&&(e.reason.code||e.reason.message))};

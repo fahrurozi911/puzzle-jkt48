@@ -64,7 +64,14 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAPXhRs345cqCxQEQY2-gcCyuGBIvIGBis",
+  authDomain: "puzzle-foto.firebaseapp.com",
+  projectId: "puzzle-foto",
+  appId: "1:842084113827:web:c3cb5e5f36be3986290e16"
+};
+</script>
 <script>
 firebase.initializeApp(FIREBASE_CONFIG);
 const db=firebase.firestore(),$=s=>document.querySelector(s);
