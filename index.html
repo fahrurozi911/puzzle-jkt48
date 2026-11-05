@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JKT48 PUZZLE</title>
+<title>Puzzle Foto</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#12141c;--panel:#242738;--sand:#ececef;--maple:#f2c14e;--ink:#171a26;--ok:#7fb069}
@@ -18,7 +18,7 @@ button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin
 .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:3px solid transparent;cursor:pointer}
 .photos img.sel{border-color:var(--maple)}
-.lay{display:flex;gap:8px}.lay button{flex:1;background:var(--panel);color:var(--sand)}.lay button.sel{background:var(--maple);color:var(--ink)}
+.lay{display:flex;gap:8px}.lay button{flex:1;background:var(--panel);color:var(--sand)}.lay button small{display:block;font-size:12px;font-weight:500;opacity:.85}.lay button.sel{background:var(--maple);color:var(--ink)}
 #board{position:relative;width:100%;aspect-ratio:1;background:var(--ink);border:8px solid var(--panel);border-radius:16px;touch-action:manipulation}
 .t{position:absolute;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px rgba(0,0,0,.45);cursor:pointer;transition:left .12s,top .12s}
 .t.blank{display:none}#board.win .t{box-shadow:none;transition:none}#board.win .t.blank{display:block}
@@ -32,18 +32,18 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;text-align:left;
 </style></head><body>
 
 <section class="scr on" id="s-login">
-  <h1>JKT48 PUZZLE</h1></h1><p></p>
+  <h1>Puzzle Foto</h1><p>Geser kotak sampai potongan foto menyatu lagi.</p>
   <input id="nm" placeholder="Nama" maxlength="16" autocomplete="off">
   <input id="pin" placeholder="PIN 4 angka" inputmode="numeric" maxlength="4" type="password">
   <div class="err" id="err"></div>
   <button class="full" onclick="login()">Masuk</button>
-  <p style="font-size:14px">Nama baru otomatis terdaftar dengan PIN yang kamu isi. Ingat PIN-mu yak</p>
+  <p style="font-size:14px">Nama baru otomatis terdaftar dengan PIN yang kamu isi. Ingat PIN-mu.</p>
 </section>
 
 <section class="scr" id="s-home">
   <div class="top"><h1 id="hi"></h1><button class="g" onclick="logout()">Keluar</button></div>
   <h2>Pilih foto</h2><div class="photos" id="pl"></div>
-  <h2>Pilih ukuran</h2>
+  <h2>Pilih ukuran <small style="font-weight:400;opacity:.7">skor terbaikmu di bawah tiap ukuran</small></h2>
   <div class="lay" id="ly"></div>
   <button class="full" onclick="start()">Main</button>
   <button class="full g" onclick="board()">Leaderboard</button>
@@ -75,7 +75,7 @@ const FIREBASE_CONFIG = {
 <script>
 firebase.initializeApp(FIREBASE_CONFIG);
 const db=firebase.firestore(),$=s=>document.querySelector(s);
-let user=null,photos=[],photo=null,N=4,b=[],t0=0,timer=null,moves=0,done=false;
+let bests={},user=null,photos=[],photo=null,N=4,b=[],t0=0,timer=null,moves=0,done=false;
 
 function show(id){document.querySelectorAll('.scr').forEach(e=>e.classList.toggle('on',e.id===id))}
 function err(m){$('#err').textContent=m}
@@ -88,20 +88,22 @@ async function login(){
   try{
     const s=await ref.get();
     if(s.exists){if(s.data().h!==h)return err('PIN salah untuk nama ini.')}else await ref.set({name,h});
-    user={id,name};localStorage.setItem('pf_user',JSON.stringify(user));err('');home();
+    bests={};user={id,name};localStorage.setItem('pf_user',JSON.stringify(user));err('');home();
   }catch(e){err('Tidak bisa terhubung. Periksa koneksi dan konfigurasi Firebase.')}
 }
-function logout(){localStorage.removeItem('pf_user');user=null;show('s-login')}
+function logout(){localStorage.removeItem('pf_user');user=null;bests={};show('s-login')}
 
 async function home(){
   stop();show('s-home');$('#hi').textContent='Hai, '+user.name;
-  $('#ly').innerHTML=[4,6,8,16].map(n=>`<button data-n="${n}" class="${n==N?'sel':''}" onclick="setN(${n})">${n}x${n}</button>`).join('');
+  renderLay();loadBests();
   if(!photos.length){
     try{const q=await db.collection('photos').orderBy('created','desc').get();photos=q.docs.map(d=>({id:d.id,...d.data()}))}catch(e){}
     $('#pl').innerHTML=photos.length?photos.map((p,i)=>`<img src="${p.data}" alt="${p.title}" onclick="pick(${i})">`).join(''):'<p>Belum ada foto. Minta admin menambahkannya.</p>';
     if(photos.length)pick(0);
   }
 }
+function renderLay(){$('#ly').innerHTML=[4,6,8,16].map(n=>`<button data-n="${n}" class="${n==N?'sel':''}" onclick="setN(${n})">${n}x${n}<small>${bests[n]||'–'}</small></button>`).join('')}
+async function loadBests(){try{const s=await db.collection('scores').doc(user.id).get();if(s.exists){const d=s.data();bests={...(d.bests||{})};if(d.n&&d.score&&!bests[d.n])bests[d.n]=d.score;renderLay()}}catch(e){}}
 function pick(i){photo=photos[i];document.querySelectorAll('#pl img').forEach((e,j)=>e.classList.toggle('sel',i==j))}
 function setN(n){N=n;document.querySelectorAll('#ly button').forEach(e=>e.classList.toggle('sel',+e.dataset.n==n))}
 
@@ -143,9 +145,13 @@ async function win(){
   const T=N*N,sec=Math.max(1,Math.round((Date.now()-t0)/1000)),f=Math.max(.1,1.5-sec/(T*6)),score=Math.round(T*100*f);
   const r=$('#res');r.style.display='block';r.innerHTML=`Selesai ${N}x${N} dalam ${fmt(sec)}, ${moves} langkah<br><b>${score}</b> poin<div id="sv"></div><div class="row"><button onclick="start()">Main lagi</button><button class="g" onclick="board()">Leaderboard</button></div>`;
   try{
-    const ref=db.collection('scores').doc(user.id),s=await ref.get();
-    if(!s.exists||s.data().score<score){await ref.set({name:user.name,score,n:N,sec,moves,t:firebase.firestore.FieldValue.serverTimestamp()});$('#sv').textContent='Skor terbaikmu diperbarui.'}
-    else $('#sv').textContent='Skor terbaikmu masih '+s.data().score+'.';
+    const ref=db.collection('scores').doc(user.id),s=await ref.get(),d=s.exists?s.data():{},bs={...(d.bests||{})};
+    if(d.n&&d.score&&!bs[d.n])bs[d.n]=d.score;
+    const rec=!(bs[N]>=score);if(rec)bs[N]=score;
+    const upd={bests:bs};
+    if(!s.exists||d.score<score)Object.assign(upd,{name:user.name,score,n:N,sec,moves,t:firebase.firestore.FieldValue.serverTimestamp()});
+    await ref.set(upd,{merge:true});bests=bs;
+    $('#sv').textContent=rec?'Rekor baru untuk '+N+'x'+N+'!':'Terbaik '+N+'x'+N+': '+bs[N]+'.';
   }catch(e){$('#sv').textContent='Skor gagal disimpan. Periksa koneksi.'}
 }
 
