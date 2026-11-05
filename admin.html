@@ -35,6 +35,8 @@ button.g{background:var(--panel);color:var(--sand)}button.full{width:100%;margin
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script>
+window.onerror=m=>{document.getElementById('msg').textContent='Error: '+m};
+window.onunhandledrejection=e=>{document.getElementById('msg').textContent='Error: '+(e.reason&&(e.reason.code||e.reason.message))};
 firebase.initializeApp(FIREBASE_CONFIG);
 const db=firebase.firestore(),$=s=>document.querySelector(s),msg=m=>$('#msg').textContent=m;
 
@@ -42,7 +44,7 @@ firebase.auth().onAuthStateChanged(u=>{
   $('#login').style.display=u?'none':'block';$('#panel').style.display=u?'block':'none';
   if(u)load();
 });
-function signIn(){firebase.auth().signInWithEmailAndPassword($('#em').value,$('#pw').value).then(()=>msg('')).catch(()=>msg('Email atau password salah.'))}
+function signIn(){firebase.auth().signInWithEmailAndPassword($('#em').value,$('#pw').value).then(()=>msg('')).catch(e=>msg('Gagal masuk: '+(e.code||e.message)))}
 
 function comp(file,q){return new Promise((ok,no)=>{
   const im=new Image();
